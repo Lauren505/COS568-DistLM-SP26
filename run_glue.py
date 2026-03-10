@@ -25,6 +25,7 @@ import random
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
@@ -71,7 +72,10 @@ def train(args, train_dataset, model, tokenizer):
     """ Train the model """
 
     args.train_batch_size = args.per_device_train_batch_size
-    train_sampler = RandomSampler(train_dataset)
+    # Part 3 begin
+    # train_sampler = RandomSampler(train_dataset)
+    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    # Part 3 end
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
     if args.max_steps > 0:
@@ -107,10 +111,15 @@ def train(args, train_dataset, model, tokenizer):
 
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
+    printed_minibatch_losses = 0
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
     for _ in train_iterator:
+        # Part 3 begin
+        if args.local_rank != -1:
+            train_sampler.set_epoch(_)
+        # Part 3 end
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
             model.train()
@@ -121,6 +130,12 @@ def train(args, train_dataset, model, tokenizer):
                       'labels':         batch[3]}
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+
+            # Part 3 begin
+            if args.local_rank in [-1, 0] and printed_minibatch_losses < 5:
+                print("minibatch {} loss: {:.6f}".format(printed_minibatch_losses + 1, loss.item()))
+                printed_minibatch_losses += 1
+            # Part 3 end
 
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
@@ -162,6 +177,11 @@ def train(args, train_dataset, model, tokenizer):
 
 
 def evaluate(args, model, tokenizer, prefix=""):
+    # Part 3 begin
+    if args.local_rank not in [-1, 0]:
+        return {}
+
+    # Part 3 end
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
     eval_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
@@ -175,9 +195,12 @@ def evaluate(args, model, tokenizer, prefix=""):
 
         args.eval_batch_size = args.per_device_eval_batch_size
         # Note that DistributedSampler samples randomly
-        eval_sampler = SequentialSampler(eval_dataset)
+        # Part 3 begin
+        # eval_sampler = SequentialSampler(eval_dataset)
+        eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset, shuffle=False)
+        # Part 3 end
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
-
+        
         # Eval!
         logger.info("***** Running evaluation {} *****".format(prefix))
         logger.info("  Num examples = %d", len(eval_dataset))
@@ -346,6 +369,14 @@ def main():
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
                              "See details at https://nvidia.github.io/apex/amp.html")
+    # Part 3 begin
+    parser.add_argument("--master_ip", type=str, default="127.0.0.1",
+                        help="Master node IP for distributed training.")
+    parser.add_argument("--master_port", type=str, default="29500",
+                        help="Master node port for distributed training.")
+    parser.add_argument("--world_size", type=int, default=1,
+                        help="Total number of participating workers.")
+    # Part 3 end
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank. If single-node training, local_rank defaults to -1.")
     args = parser.parse_args()
@@ -354,8 +385,27 @@ def main():
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
 
     # set up (distributed) training
-    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    args.n_gpu = torch.cuda.device_count()
+    # Part 3 begin
+    # args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    # args.n_gpu = torch.cuda.device_count()
+    if args.local_rank == -1 or args.world_size == 1:
+        args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        args.n_gpu = torch.cuda.device_count()
+    else:
+        backend = 'nccl' if torch.cuda.is_available() and not args.no_cuda else 'gloo'
+        if backend == 'nccl':
+            torch.cuda.set_device(0)
+            args.device = torch.device("cuda", 0)
+        else:
+            args.device = torch.device("cpu")
+        dist.init_process_group(
+            backend=backend,
+            init_method="tcp://{}:{}".format(args.master_ip, args.master_port),
+            world_size=args.world_size,
+            rank=args.local_rank,
+        )
+        args.n_gpu = 1
+    # Part 3 end
 
     # Setup logging
     logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -395,7 +445,13 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
-
+    # Part 3 begin
+    if args.local_rank != -1 and args.world_size > 1:
+        if args.device.type == "cuda":
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[0], output_device=0)
+        else:
+            model = torch.nn.parallel.DistributedDataParallel(model)
+    # Part 3 end
     logger.info("Training/evaluation parameters %s", args)
 
 
