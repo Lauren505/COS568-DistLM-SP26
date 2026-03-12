@@ -69,6 +69,35 @@ def set_seed(args):
     torch.cuda.manual_seed_all(args.seed)
 
 
+def write_training_artifacts(args, loss_curve, iter_times):
+    rank_label = args.local_rank if args.local_rank != -1 else 0
+    if not os.path.exists(args.results_dir):
+        os.makedirs(args.results_dir)
+
+    loss_file = os.path.join(args.results_dir, "loss_rank_{}.txt".format(rank_label))
+    with open(loss_file, "w") as writer:
+        for step, loss_value in enumerate(loss_curve):
+            writer.write("{}\t{:.10f}\n".format(step, loss_value))
+
+    avg_iter_time = sum(iter_times) / len(iter_times) if iter_times else 0.0
+
+    if args.local_rank != -1 and args.world_size > 1:
+        gathered_avg_times = [None for _ in range(args.world_size)]
+        dist.all_gather_object(gathered_avg_times, avg_iter_time)
+    else:
+        gathered_avg_times = [avg_iter_time]
+
+    if args.local_rank in [-1, 0]:
+        timing_file = os.path.join(args.results_dir, "iteration_times.txt")
+        with open(timing_file, "w") as writer:
+            for rank, rank_avg_time in enumerate(gathered_avg_times):
+                writer.write("rank_{}\t{:.10f}\n".format(rank, rank_avg_time))
+
+            valid_times = [rank_avg_time for rank_avg_time in gathered_avg_times if rank_avg_time is not None]
+            if valid_times:
+                writer.write("overall_mean\t{:.10f}\n".format(sum(valid_times) / len(valid_times)))
+
+
 def train(args, train_dataset, model, tokenizer):
     """ Train the model """
 
@@ -192,11 +221,12 @@ def train(args, train_dataset, model, tokenizer):
         ##################################################
 
     # Part 3 begin
-    # Report per-node loss curve
+    # Save per-rank loss curves and a single aggregated timing file.
+    write_training_artifacts(args, loss_curve, iter_times)
+
     rank_label = args.local_rank if args.local_rank != -1 else 0
     logger.info("Rank %d loss curve: %s", rank_label, loss_curve)
 
-    # Report per-iteration timing (first iteration discarded)
     if iter_times:
         avg_iter_time = sum(iter_times) / len(iter_times)
         logger.info("Rank %d: avg time per iteration (excluding first): %.4f s over %d iterations",
@@ -407,6 +437,9 @@ def main():
                         help="Master node port for distributed training.")
     parser.add_argument("--world_size", type=int, default=1,
                         help="Total number of participating workers.")
+    parser.add_argument("--results_dir", type=str,
+                        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Part3", "results"),
+                        help="Directory for timing and loss-curve artifacts.")
     # Part 3 end
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank. If single-node training, local_rank defaults to -1.")
@@ -436,15 +469,29 @@ def main():
             rank=args.local_rank,
         )
         args.n_gpu = 1
-    # Part 3 end
+    
 
     # Setup logging
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+    if not os.path.exists(args.results_dir):
+        os.makedirs(args.results_dir)
+
+    rank_label = args.local_rank if args.local_rank != -1 else 0
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
+    file_handler = logging.FileHandler(os.path.join(args.results_dir, "run_rank_{}.log".format(rank_label)))
+    file_handler.setLevel(logging.INFO)
+    log_handlers = [console_handler, file_handler]
     logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                         datefmt = '%m/%d/%Y %H:%M:%S',
-                        level = logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
+                        level = logging.INFO,
+                        handlers=log_handlers,
+                        force=True)
     logger.warning("Process rank: %s, device: %s, distributed training: %s, 16-bits training: %s",
                     args.local_rank, args.device, bool(args.local_rank != -1), args.fp16)
-
+    # Part 3 end
+    
     # Set seed
     set_seed(args)
 
