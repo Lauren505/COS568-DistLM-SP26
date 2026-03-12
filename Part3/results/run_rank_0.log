@@ -1,6 +1,6 @@
-03/12/2026 13:51:28 - WARNING - __main__ -   Process rank: 0, device: cpu, distributed training: True, 16-bits training: False
-03/12/2026 13:51:28 - INFO - pytorch_transformers.modeling_utils -   loading configuration file https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-config.json from cache at /users/shrek/.cache/torch/pytorch_transformers/b945b69218e98b3e2c95acf911789741307dec43c698d35fad11c1ae28bda352.9da767be51e1327499df13488672789394e2ca38b877837e52618a67d7002391
-03/12/2026 13:51:28 - INFO - pytorch_transformers.modeling_utils -   Model config {
+03/12/2026 14:12:55 - WARNING - __main__ -   Process rank: 0, device: cpu, distributed training: True, 16-bits training: False
+03/12/2026 14:12:56 - INFO - pytorch_transformers.modeling_utils -   loading configuration file https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-config.json from cache at /users/shrek/.cache/torch/pytorch_transformers/b945b69218e98b3e2c95acf911789741307dec43c698d35fad11c1ae28bda352.9da767be51e1327499df13488672789394e2ca38b877837e52618a67d7002391
+03/12/2026 14:12:56 - INFO - pytorch_transformers.modeling_utils -   Model config {
   "architectures": [
     "BertForMaskedLM"
   ],
@@ -26,31 +26,32 @@
   "vocab_size": 28996
 }
 
-03/12/2026 13:51:28 - INFO - pytorch_transformers.tokenization_utils -   loading file https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-vocab.txt from cache at /users/shrek/.cache/torch/pytorch_transformers/5e8a2b4893d13790ed4150ca1906be5f7a03d6c4ddf62296c383f6db42814db2.e13dbb970cb325137104fb2e5f36fe865f27746c6b526f6352861b1980eb80b1
-03/12/2026 13:51:29 - INFO - pytorch_transformers.modeling_utils -   loading weights file https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-pytorch_model.bin from cache at /users/shrek/.cache/torch/pytorch_transformers/35d8b9d36faaf46728a0192d82bf7d00137490cd6074e8500778afed552a67e5.3fadbea36527ae472139fe84cddaa65454d7429f12d543d80bfc3ad70de55ac2
-03/12/2026 13:51:30 - INFO - pytorch_transformers.modeling_utils -   Weights of BertForSequenceClassification not initialized from pretrained model: ['classifier.weight', 'classifier.bias']
-03/12/2026 13:51:30 - INFO - pytorch_transformers.modeling_utils -   Weights from pretrained model not used in BertForSequenceClassification: ['cls.predictions.bias', 'cls.predictions.transform.dense.weight', 'cls.predictions.transform.dense.bias', 'cls.predictions.decoder.weight', 'cls.seq_relationship.weight', 'cls.seq_relationship.bias', 'cls.predictions.transform.LayerNorm.weight', 'cls.predictions.transform.LayerNorm.bias']
-03/12/2026 13:51:34 - INFO - __main__ -   Training/evaluation parameters Namespace(data_dir='/users/shrek/glue_data/RTE', model_type='bert', model_name_or_path='bert-base-cased', task_name='rte', output_dir='/tmp/RTE/', config_name='', tokenizer_name='', cache_dir='', max_seq_length=128, do_train=True, do_eval=True, do_lower_case=False, per_device_train_batch_size=16, per_device_eval_batch_size=8, gradient_accumulation_steps=1, learning_rate=2e-05, weight_decay=0.0, adam_epsilon=1e-08, max_grad_norm=1.0, num_train_epochs=1.0, max_steps=-1, warmup_steps=0, no_cuda=False, overwrite_output_dir=True, overwrite_cache=False, seed=42, fp16=False, fp16_opt_level='O1', master_ip='10.10.1.2', master_port='12345', world_size=4, results_dir='/users/shrek/COS568-DistLM-SP26/Part3/results', local_rank=0, device=device(type='cpu'), n_gpu=1, output_mode='classification')
-03/12/2026 13:51:34 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_train_bert-base-cased_128_rte
-03/12/2026 13:51:34 - INFO - __main__ -   ***** Running training *****
-03/12/2026 13:51:34 - INFO - __main__ -     Num examples = 2490
-03/12/2026 13:51:34 - INFO - __main__ -     Num Epochs = 1
-03/12/2026 13:51:34 - INFO - __main__ -     Instantaneous batch size per device = 16
-03/12/2026 13:51:34 - INFO - __main__ -     Total train batch size (w. parallel, distributed & accumulation) = 64
-03/12/2026 13:51:34 - INFO - __main__ -     Gradient Accumulation steps = 1
-03/12/2026 13:51:34 - INFO - __main__ -     Total optimization steps = 39
-03/12/2026 13:52:37 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_dev_bert-base-cased_128_rte
-03/12/2026 13:52:37 - INFO - __main__ -   ***** Running evaluation  *****
-03/12/2026 13:52:37 - INFO - __main__ -     Num examples = 277
-03/12/2026 13:52:37 - INFO - __main__ -     Batch size = 8
-03/12/2026 13:52:38 - INFO - __main__ -   ***** Eval results  *****
-03/12/2026 13:52:38 - INFO - __main__ -     acc = 0.6285714285714286
-03/12/2026 13:52:38 - INFO - __main__ -   Rank 0 loss curve: [0.9412832260131836, 0.8928708434104919, 0.6499286890029907, 0.6082603931427002, 0.7481549382209778, 0.7163247466087341, 0.712179958820343, 0.7204082608222961, 0.6837247610092163, 0.7025788426399231, 0.6743226647377014, 0.6346275806427002, 0.7356266975402832, 0.7202005982398987, 0.6969019770622253, 0.6632837057113647, 0.7012202739715576, 0.6528066992759705, 0.6856708526611328, 0.6888302564620972, 0.6908311247825623, 0.6993992924690247, 0.6756141185760498, 0.668753981590271, 0.6765525937080383, 0.6721910834312439, 0.6468062996864319, 0.6362999677658081, 0.6307457685470581, 0.6405341029167175, 0.7167795300483704, 0.6874585151672363, 0.6785904169082642, 0.7177387475967407, 0.7194639444351196, 0.6533252000808716, 0.6592704653739929, 0.7123329043388367, 0.6418021321296692]
-03/12/2026 13:52:38 - INFO - __main__ -   Rank 0: avg time per iteration (excluding first): 1.5539 s over 38 iterations
-03/12/2026 13:52:38 - INFO - __main__ -    global_step = 39, average loss = 0.6936845168089255
-03/12/2026 13:52:38 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_dev_bert-base-cased_128_rte
-03/12/2026 13:52:38 - INFO - __main__ -   ***** Running evaluation  *****
-03/12/2026 13:52:38 - INFO - __main__ -     Num examples = 277
-03/12/2026 13:52:38 - INFO - __main__ -     Batch size = 8
-03/12/2026 13:52:40 - INFO - __main__ -   ***** Eval results  *****
-03/12/2026 13:52:40 - INFO - __main__ -     acc = 0.6285714285714286
+03/12/2026 14:12:56 - INFO - pytorch_transformers.tokenization_utils -   loading file https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-vocab.txt from cache at /users/shrek/.cache/torch/pytorch_transformers/5e8a2b4893d13790ed4150ca1906be5f7a03d6c4ddf62296c383f6db42814db2.e13dbb970cb325137104fb2e5f36fe865f27746c6b526f6352861b1980eb80b1
+03/12/2026 14:12:56 - INFO - pytorch_transformers.modeling_utils -   loading weights file https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-pytorch_model.bin from cache at /users/shrek/.cache/torch/pytorch_transformers/35d8b9d36faaf46728a0192d82bf7d00137490cd6074e8500778afed552a67e5.3fadbea36527ae472139fe84cddaa65454d7429f12d543d80bfc3ad70de55ac2
+03/12/2026 14:12:58 - INFO - pytorch_transformers.modeling_utils -   Weights of BertForSequenceClassification not initialized from pretrained model: ['classifier.weight', 'classifier.bias']
+03/12/2026 14:12:58 - INFO - pytorch_transformers.modeling_utils -   Weights from pretrained model not used in BertForSequenceClassification: ['cls.predictions.bias', 'cls.predictions.transform.dense.weight', 'cls.predictions.transform.dense.bias', 'cls.predictions.decoder.weight', 'cls.seq_relationship.weight', 'cls.seq_relationship.bias', 'cls.predictions.transform.LayerNorm.weight', 'cls.predictions.transform.LayerNorm.bias']
+03/12/2026 14:13:02 - INFO - __main__ -   Training/evaluation parameters Namespace(data_dir='/users/shrek/glue_data/RTE', model_type='bert', model_name_or_path='bert-base-cased', task_name='rte', output_dir='/tmp/RTE/', config_name='', tokenizer_name='', cache_dir='', max_seq_length=128, do_train=True, do_eval=True, do_lower_case=False, per_device_train_batch_size=16, per_device_eval_batch_size=8, gradient_accumulation_steps=1, learning_rate=2e-05, weight_decay=0.0, adam_epsilon=1e-08, max_grad_norm=1.0, num_train_epochs=1.0, max_steps=-1, warmup_steps=0, no_cuda=False, overwrite_output_dir=True, overwrite_cache=False, seed=42, fp16=False, fp16_opt_level='O1', master_ip='10.10.1.2', master_port='12345', world_size=4, results_dir='/users/shrek/COS568-DistLM-SP26/Part3/results', enable_profiler=True, local_rank=0, device=device(type='cpu'), n_gpu=1, output_mode='classification')
+03/12/2026 14:13:02 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_train_bert-base-cased_128_rte
+03/12/2026 14:13:02 - INFO - __main__ -   ***** Running training *****
+03/12/2026 14:13:02 - INFO - __main__ -     Num examples = 2490
+03/12/2026 14:13:02 - INFO - __main__ -     Num Epochs = 1
+03/12/2026 14:13:02 - INFO - __main__ -     Instantaneous batch size per device = 16
+03/12/2026 14:13:02 - INFO - __main__ -     Total train batch size (w. parallel, distributed & accumulation) = 64
+03/12/2026 14:13:02 - INFO - __main__ -     Gradient Accumulation steps = 1
+03/12/2026 14:13:02 - INFO - __main__ -     Total optimization steps = 39
+03/12/2026 14:14:03 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_dev_bert-base-cased_128_rte
+03/12/2026 14:14:03 - INFO - __main__ -   ***** Running evaluation  *****
+03/12/2026 14:14:03 - INFO - __main__ -     Num examples = 277
+03/12/2026 14:14:03 - INFO - __main__ -     Batch size = 8
+03/12/2026 14:14:04 - INFO - __main__ -   ***** Eval results  *****
+03/12/2026 14:14:04 - INFO - __main__ -     acc = 0.6285714285714286
+03/12/2026 14:14:04 - INFO - __main__ -   Saved profiler trace to /users/shrek/COS568-DistLM-SP26/Part3/results/trace.json
+03/12/2026 14:14:04 - INFO - __main__ -   Rank 0 loss curve: [0.9412832260131836, 0.8928708434104919, 0.6499286890029907, 0.6082603931427002, 0.7481549382209778, 0.7163247466087341, 0.712179958820343, 0.7204082608222961, 0.6837247610092163, 0.7025788426399231, 0.6743226647377014, 0.6346275806427002, 0.7356266975402832, 0.7202005982398987, 0.6969019770622253, 0.6632837057113647, 0.7012202739715576, 0.6528066992759705, 0.6856708526611328, 0.6888302564620972, 0.6908311247825623, 0.6993992924690247, 0.6756141185760498, 0.668753981590271, 0.6765525937080383, 0.6721910834312439, 0.6468062996864319, 0.6362999677658081, 0.6307457685470581, 0.6405341029167175, 0.7167795300483704, 0.6874585151672363, 0.6785904169082642, 0.7177387475967407, 0.7194639444351196, 0.6533252000808716, 0.6592704653739929, 0.7123329043388367, 0.6418021321296692]
+03/12/2026 14:14:04 - INFO - __main__ -   Rank 0: avg time per iteration (excluding first): 1.4767 s over 38 iterations
+03/12/2026 14:14:04 - INFO - __main__ -    global_step = 39, average loss = 0.6936845168089255
+03/12/2026 14:14:04 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_dev_bert-base-cased_128_rte
+03/12/2026 14:14:04 - INFO - __main__ -   ***** Running evaluation  *****
+03/12/2026 14:14:04 - INFO - __main__ -     Num examples = 277
+03/12/2026 14:14:04 - INFO - __main__ -     Batch size = 8
+03/12/2026 14:14:06 - INFO - __main__ -   ***** Eval results  *****
+03/12/2026 14:14:06 - INFO - __main__ -     acc = 0.6285714285714286
