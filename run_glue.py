@@ -177,11 +177,6 @@ def train(args, train_dataset, model, tokenizer):
 
 
 def evaluate(args, model, tokenizer, prefix=""):
-    # Part 3 begin
-    if args.local_rank not in [-1, 0]:
-        return {}
-
-    # Part 3 end
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
     eval_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
@@ -189,6 +184,12 @@ def evaluate(args, model, tokenizer, prefix=""):
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
         eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
+
+        # Part 3: all ranks participate in the barrier inside load_and_cache_examples above,
+        # but only rank 0 (or single-node) actually runs evaluation.
+        if args.local_rank not in [-1, 0]:
+            continue
+        # Part 3 ends
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
