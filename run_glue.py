@@ -146,10 +146,27 @@ def train(args, train_dataset, model, tokenizer):
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
     printed_minibatch_losses = 0
+    profiler = None
     # Part 3 begin
     iter_times = []
     loss_curve = []  # loss curve for this node (rank)
     # Part 3 ends
+
+    # Part 4: profile 3 training steps while skipping the first step.
+    if args.enable_profiler and args.local_rank in [-1, 0]:
+        profiler_activities = [torch.profiler.ProfilerActivity.CPU]
+        if args.device.type == "cuda":
+            profiler_activities.append(torch.profiler.ProfilerActivity.CUDA)
+
+        profiler = torch.profiler.profile(
+            activities=profiler_activities,
+            schedule=torch.profiler.schedule(wait=1, warmup=0, active=3, repeat=1),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=False,
+        )
+        profiler.start()
+
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
@@ -210,6 +227,9 @@ def train(args, train_dataset, model, tokenizer):
             # Skip the first iteration (warm-up / data loading overhead)
             if step > 0:
                 iter_times.append(iter_elapsed)
+
+            if profiler is not None:
+                profiler.step()
             # Part 3 end
 
             if args.max_steps > 0 and global_step > args.max_steps:
@@ -227,6 +247,12 @@ def train(args, train_dataset, model, tokenizer):
     # Part 3 begin
     # Save per-rank loss curves and a single aggregated timing file.
     write_training_artifacts(args, loss_curve, iter_times)
+
+    if profiler is not None:
+        profiler.stop()
+        trace_path = os.path.join(args.results_dir, "trace.json")
+        profiler.export_chrome_trace(trace_path)
+        logger.info("Saved profiler trace to %s", trace_path)
 
     rank_label = args.local_rank if args.local_rank != -1 else 0
     logger.info("Rank %d loss curve: %s", rank_label, loss_curve)
@@ -444,6 +470,8 @@ def main():
     parser.add_argument("--results_dir", type=str,
                         default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Part3", "results"),
                         help="Directory for timing and loss-curve artifacts.")
+    parser.add_argument("--enable_profiler", action='store_true',
+                        help="Enable torch.profiler and save trace.json (skip first step, profile next three).")
     # Part 3 end
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank. If single-node training, local_rank defaults to -1.")
