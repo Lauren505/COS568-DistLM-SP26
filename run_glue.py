@@ -74,20 +74,24 @@ def write_training_artifacts(args, loss_curve, iter_times):
     if not os.path.exists(args.results_dir):
         os.makedirs(args.results_dir)
 
-    loss_file = os.path.join(args.results_dir, "loss_rank_{}.txt".format(rank_label))
-    with open(loss_file, "w") as writer:
-        for step, loss_value in enumerate(loss_curve):
-            writer.write("{}\t{:.10f}\n".format(step, loss_value))
-
     avg_iter_time = sum(iter_times) / len(iter_times) if iter_times else 0.0
 
     if args.local_rank != -1 and args.world_size > 1:
+        gathered_loss_curves = [None for _ in range(args.world_size)]
         gathered_avg_times = [None for _ in range(args.world_size)]
+        dist.all_gather_object(gathered_loss_curves, loss_curve)
         dist.all_gather_object(gathered_avg_times, avg_iter_time)
     else:
+        gathered_loss_curves = [loss_curve]
         gathered_avg_times = [avg_iter_time]
 
     if args.local_rank in [-1, 0]:
+        for rank, rank_loss_curve in enumerate(gathered_loss_curves):
+            loss_file = os.path.join(args.results_dir, "loss_rank_{}.txt".format(rank))
+            with open(loss_file, "w") as writer:
+                for step, loss_value in enumerate(rank_loss_curve):
+                    writer.write("{}\t{:.10f}\n".format(step, loss_value))
+
         timing_file = os.path.join(args.results_dir, "iteration_times.txt")
         with open(timing_file, "w") as writer:
             for rank, rank_avg_time in enumerate(gathered_avg_times):
@@ -479,7 +483,7 @@ def main():
 
     rank_label = args.local_rank if args.local_rank != -1 else 0
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
+    console_handler.setLevel(logging.INFO)
     file_handler = logging.FileHandler(os.path.join(args.results_dir, "run_rank_{}.log".format(rank_label)))
     file_handler.setLevel(logging.INFO)
     log_handlers = [console_handler, file_handler]
