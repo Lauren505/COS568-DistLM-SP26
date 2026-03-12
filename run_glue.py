@@ -22,6 +22,7 @@ import glob
 import logging
 import os
 import random
+import time
 
 import numpy as np
 import torch
@@ -112,6 +113,10 @@ def train(args, train_dataset, model, tokenizer):
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
     printed_minibatch_losses = 0
+    # Part 3 begin
+    iter_times = []
+    loss_curve = []  # loss curve for this node (rank)
+    # Part 3 ends
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
@@ -122,6 +127,9 @@ def train(args, train_dataset, model, tokenizer):
         # Part 3 end
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
+            # Part 3 begin
+            iter_start = time.perf_counter()
+            # part 3 end
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':      batch[0],
@@ -135,6 +143,9 @@ def train(args, train_dataset, model, tokenizer):
             if args.local_rank in [-1, 0] and printed_minibatch_losses < 5:
                 print("minibatch {} loss: {:.6f}".format(printed_minibatch_losses + 1, loss.item()))
                 printed_minibatch_losses += 1
+
+            # Log loss for every step on every node
+            loss_curve.append(loss.item())
             # Part 3 end
 
             if args.gradient_accumulation_steps > 1:
@@ -161,6 +172,13 @@ def train(args, train_dataset, model, tokenizer):
                 model.zero_grad()
                 global_step += 1
 
+            # Part 3 begin
+            iter_elapsed = time.perf_counter() - iter_start
+            # Skip the first iteration (warm-up / data loading overhead)
+            if step > 0:
+                iter_times.append(iter_elapsed)
+            # Part 3 end
+
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
                 break
@@ -173,6 +191,18 @@ def train(args, train_dataset, model, tokenizer):
         evaluate(args, model, tokenizer, prefix="")
         ##################################################
 
+    # Part 3 begin
+    # Report per-node loss curve
+    rank_label = args.local_rank if args.local_rank != -1 else 0
+    logger.info("Rank %d loss curve: %s", rank_label, loss_curve)
+
+    # Report per-iteration timing (first iteration discarded)
+    if iter_times:
+        avg_iter_time = sum(iter_times) / len(iter_times)
+        logger.info("Rank %d: avg time per iteration (excluding first): %.4f s over %d iterations",
+                    rank_label, avg_iter_time, len(iter_times))
+    # Part 3 end
+    
     return global_step, tr_loss / global_step
 
 
