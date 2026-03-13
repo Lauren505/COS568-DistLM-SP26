@@ -155,7 +155,7 @@ def train(args, train_dataset, model, tokenizer):
 
         profiler = torch.profiler.profile(
             activities=profiler_activities,
-            schedule=torch.profiler.schedule(wait=10, warmup=0, active=3, repeat=1),
+            schedule=torch.profiler.schedule(wait=1, warmup=0, active=38, repeat=1),
             record_shapes=True,
             profile_memory=True,
             with_stack=False,
