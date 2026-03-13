@@ -64,6 +64,9 @@ def set_seed(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.cuda.manual_seed_all(args.seed)
 
 
 def write_training_artifacts(args, loss_curve, iter_times):
@@ -99,47 +102,14 @@ def write_training_artifacts(args, loss_curve, iter_times):
                 writer.write("overall_mean\t{:.10f}\n".format(sum(valid_times) / len(valid_times)))
 
 
-# Part 2 begin
-def read_gradient_snapshot(model, max_tensors=3):
-    """Return lightweight gradient stats from parameter .grad tensors."""
-    snapshot = []
-    for name, param in model.named_parameters():
-        if param.grad is None:
-            continue
-        grad = param.grad.detach()
-        snapshot.append((name, tuple(grad.shape), float(grad.norm().item())))
-        if len(snapshot) >= max_tensors:
-            break
-    return snapshot
-
-
-def sync_gradients_with_gather_scatter(model, world_size, rank):
-    """Part 2(a) Step 3: gather grads to rank 0, average, scatter back."""
-    for _, param in model.named_parameters():
-        if param.grad is None:
-            continue
-
-        grad = param.grad.data
-        recv = torch.zeros_like(grad)
-
-        if rank == 0:
-            gathered = [torch.zeros_like(grad) for _ in range(world_size)]
-            dist.gather(grad, gather_list=gathered, dst=0)
-            avg_grad = sum(gathered) / world_size
-            scatter_list = [avg_grad.clone() for _ in range(world_size)]
-            dist.scatter(recv, scatter_list=scatter_list, src=0)
-        else:
-            dist.gather(grad, gather_list=None, dst=0)
-            dist.scatter(recv, scatter_list=None, src=0)
-
-        param.grad.data.copy_(recv)
-# Part 2 end
-
 def train(args, train_dataset, model, tokenizer):
     """ Train the model """
 
     args.train_batch_size = args.per_device_train_batch_size
+    # Part 3 begin
+    # train_sampler = RandomSampler(train_dataset)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    # Part 3 end
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
     if args.max_steps > 0:
@@ -176,7 +146,6 @@ def train(args, train_dataset, model, tokenizer):
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
     printed_minibatch_losses = 0
-    printed_gradient_snapshot = False
     profiler = None
     # Part 3 begin
     iter_times = []
@@ -186,6 +155,8 @@ def train(args, train_dataset, model, tokenizer):
     # Part 4: profile 3 training steps while skipping the first step.
     if args.enable_profiler and args.local_rank in [-1, 0]:
         profiler_activities = [torch.profiler.ProfilerActivity.CPU]
+        if args.device.type == "cuda":
+            profiler_activities.append(torch.profiler.ProfilerActivity.CUDA)
 
         profiler = torch.profiler.profile(
             activities=profiler_activities,
@@ -239,22 +210,6 @@ def train(args, train_dataset, model, tokenizer):
                 # TODO(cos568): perform backward pass here (expect one line of code)
                 loss.backward()
                 ##################################################
-
-                # Part 2(a) Step 2: explicitly read gradients after backward.
-                if args.local_rank != -1 and args.world_size > 1 and not printed_gradient_snapshot:
-                    grad_snapshot = read_gradient_snapshot(model)
-                    rank_label = dist.get_rank()
-                    logger.info("Rank %d gradient snapshot (name, shape, L2 norm): %s",
-                                rank_label, grad_snapshot)
-                    printed_gradient_snapshot = True
-
-                if args.local_rank != -1 and args.world_size > 1:
-                    sync_gradients_with_gather_scatter(
-                        model=model,
-                        world_size=args.world_size,
-                        rank=dist.get_rank(),
-                    )
-
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             tr_loss += loss.item()
@@ -513,7 +468,7 @@ def main():
     parser.add_argument("--world_size", type=int, default=1,
                         help="Total number of participating workers.")
     parser.add_argument("--results_dir", type=str,
-                        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Part2a", "results"),
+                        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Part3", "results"),
                         help="Directory for timing and loss-curve artifacts.")
     parser.add_argument("--enable_profiler", action='store_true',
                         help="Enable torch.profiler and save trace.json (skip first step, profile next three).")
@@ -525,16 +480,27 @@ def main():
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
 
-    # set up (distributed) training for CPU-only Part 2 work
-    args.device = torch.device("cpu")
-    args.n_gpu = 0
-    if args.local_rank != -1 and args.world_size > 1:
+    # set up (distributed) training
+    # Part 3 begin
+    # args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    # args.n_gpu = torch.cuda.device_count()
+    if args.local_rank == -1 or args.world_size == 1:
+        args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        args.n_gpu = torch.cuda.device_count()
+    else:
+        backend = 'nccl' if torch.cuda.is_available() and not args.no_cuda else 'gloo'
+        if backend == 'nccl':
+            torch.cuda.set_device(0)
+            args.device = torch.device("cuda", 0)
+        else:
+            args.device = torch.device("cpu")
         dist.init_process_group(
-            backend="gloo",
+            backend=backend,
             init_method="tcp://{}:{}".format(args.master_ip, args.master_port),
             world_size=args.world_size,
             rank=args.local_rank,
         )
+        args.n_gpu = 1
     
 
     # Setup logging
@@ -546,11 +512,9 @@ def main():
     rank_label = args.local_rank if args.local_rank != -1 else 0
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-    log_handlers = [console_handler]
-    if args.local_rank in [-1, 0]:
-        file_handler = logging.FileHandler(os.path.join(args.results_dir, "run_rank_{}.log".format(rank_label)))
-        file_handler.setLevel(logging.INFO)
-        log_handlers.append(file_handler)
+    file_handler = logging.FileHandler(os.path.join(args.results_dir, "run_rank_{}.log".format(rank_label)))
+    file_handler.setLevel(logging.INFO)
+    log_handlers = [console_handler, file_handler]
     logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                         datefmt = '%m/%d/%Y %H:%M:%S',
                         level = logging.INFO,
@@ -591,6 +555,13 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
+    # Part 3 begin
+    if args.local_rank != -1 and args.world_size > 1:
+        if args.device.type == "cuda":
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[0], output_device=0)
+        else:
+            model = torch.nn.parallel.DistributedDataParallel(model)
+    # Part 3 end
     logger.info("Training/evaluation parameters %s", args)
 
 
