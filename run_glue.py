@@ -500,7 +500,7 @@ def main():
     parser.add_argument("--world_size", type=int, default=1,
                         help="Total number of participating workers.")
     parser.add_argument("--results_dir", type=str,
-                        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Part2a", "results"),
+                        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Part2b", "results"),
                         help="Directory for timing and loss-curve artifacts.")
     parser.add_argument("--enable_profiler", action='store_true',
                         help="Enable torch.profiler and save trace.json (skip first step, profile next three).")
