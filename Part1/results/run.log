@@ -1,0 +1,52 @@
+03/13/2026 15:50:48 - INFO - __main__ -   ***** Running training *****
+03/13/2026 15:50:48 - INFO - __main__ -     Num examples = 2490
+03/13/2026 15:50:48 - INFO - __main__ -     Num Epochs = 3
+03/13/2026 15:50:48 - INFO - __main__ -     Instantaneous batch size per device = 64
+03/13/2026 15:50:48 - INFO - __main__ -     Total train batch size (w. parallel, distributed & accumulation) = 64
+03/13/2026 15:50:48 - INFO - __main__ -     Gradient Accumulation steps = 1
+03/13/2026 15:50:48 - INFO - __main__ -     Total optimization steps = 117
+Epoch:   0%|                                                                                           | 0/3 [00:00<?, ?it/sminibatch 1 loss: 0.769171                                                                             | 0/39 [00:00<?, ?it/s]
+/users/shrek/.local/lib/python3.10/site-packages/pytorch_transformers/optimization.py:166: UserWarning: This overload of add_ is deprecated:
+        add_(Number alpha, Tensor other)
+Consider using one of the following signatures instead:
+        add_(Tensor other, *, Number alpha = 1) (Triggered internally at ../torch/csrc/utils/python_arg_parser.cpp:1642.)
+  exp_avg.mul_(beta1).add_(1.0 - beta1, grad)
+                                                                                                                            minibatch 2 loss: 0.781734                                                                     | 1/39 [00:08<05:13,  8.25s/it]
+                                                                                                                            minibatch 3 loss: 0.688584                                                                     | 2/39 [00:13<03:51,  6.25s/it]
+                                                                                                                            minibatch 4 loss: 0.766275                                                                     | 3/39 [00:18<03:36,  6.02s/it]
+                                                                                                                            minibatch 5 loss: 0.734187                                                                     | 4/39 [00:23<03:06,  5.34s/it]
+Iteration: 100%|█████████████████████████████████████████████████████████████████████████████| 39/39 [02:29<00:00,  3.83s/it]
+03/13/2026 15:53:18 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_dev_bert-base-cased_128_rte
+/users/shrek/COS568-DistLM-SP26/Part1/run_glue.py:247: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  features = torch.load(cached_features_file)
+03/13/2026 15:53:18 - INFO - __main__ -   ***** Running evaluation  *****
+03/13/2026 15:53:18 - INFO - __main__ -     Num examples = 277
+03/13/2026 15:53:18 - INFO - __main__ -     Batch size = 8
+Evaluating: 100%|████████████████████████████████████████████████████████████████████████████| 35/35 [00:06<00:00,  5.57it/s]
+03/13/2026 15:53:24 - INFO - __main__ -   ***** Eval results  *****██████████████████████████| 35/35 [00:06<00:00,  5.78it/s]
+03/13/2026 15:53:24 - INFO - __main__ -     acc = 0.628158844765343
+Iteration: 100%|█████████████████████████████████████████████████████████████████████████████| 39/39 [02:08<00:00,  3.29s/it]
+03/13/2026 15:55:32 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_dev_bert-base-cased_128_rte
+03/13/2026 15:55:32 - INFO - __main__ -   ***** Running evaluation  *****
+03/13/2026 15:55:32 - INFO - __main__ -     Num examples = 277
+03/13/2026 15:55:32 - INFO - __main__ -     Batch size = 8
+Evaluating: 100%|████████████████████████████████████████████████████████████████████████████| 35/35 [00:05<00:00,  6.02it/s]
+03/13/2026 15:55:38 - INFO - __main__ -   ***** Eval results  *****██████████████████████████| 35/35 [00:05<00:00,  6.12it/s]
+03/13/2026 15:55:38 - INFO - __main__ -     acc = 0.6498194945848376
+Iteration: 100%|█████████████████████████████████████████████████████████████████████████████| 39/39 [02:07<00:00,  3.27s/it]
+03/13/2026 15:57:46 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_dev_bert-base-cased_128_rte
+03/13/2026 15:57:46 - INFO - __main__ -   ***** Running evaluation  *****
+03/13/2026 15:57:46 - INFO - __main__ -     Num examples = 277
+03/13/2026 15:57:46 - INFO - __main__ -     Batch size = 8
+Evaluating: 100%|████████████████████████████████████████████████████████████████████████████| 35/35 [00:06<00:00,  5.61it/s]
+03/13/2026 15:57:52 - INFO - __main__ -   ***** Eval results  *****██████████████████████████| 35/35 [00:06<00:00,  5.82it/s]
+03/13/2026 15:57:52 - INFO - __main__ -     acc = 0.6209386281588448
+Epoch: 100%|██████████████████████████████████████████████████████████████████████████████████| 3/3 [07:03<00:00, 141.28s/it]
+03/13/2026 15:57:53 - INFO - __main__ -    global_step = 117, average loss = 0.6365272183703561
+03/13/2026 15:57:53 - INFO - __main__ -   Loading features from cached file /users/shrek/glue_data/RTE/cached_dev_bert-base-cased_128_rte
+03/13/2026 15:57:53 - INFO - __main__ -   ***** Running evaluation  *****
+03/13/2026 15:57:53 - INFO - __main__ -     Num examples = 277
+03/13/2026 15:57:53 - INFO - __main__ -     Batch size = 8
+Evaluating: 100%|████████████████████████████████████████████████████████████████████████████| 35/35 [00:06<00:00,  5.38it/s]
+03/13/2026 15:57:59 - INFO - __main__ -   ***** Eval results  *****
+03/13/2026 15:57:59 - INFO - __main__ -     acc = 0.6209386281588448

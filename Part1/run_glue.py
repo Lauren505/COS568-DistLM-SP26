@@ -107,6 +107,7 @@ def train(args, train_dataset, model, tokenizer):
 
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
+    printed_minibatch_losses = 0
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
@@ -121,6 +122,10 @@ def train(args, train_dataset, model, tokenizer):
                       'labels':         batch[3]}
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+
+            if args.local_rank in [-1, 0] and printed_minibatch_losses < 5:
+                print("minibatch {} loss: {:.6f}".format(printed_minibatch_losses + 1, loss.item()))
+                printed_minibatch_losses += 1
 
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
