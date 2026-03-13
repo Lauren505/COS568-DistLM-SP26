@@ -106,10 +106,7 @@ def train(args, train_dataset, model, tokenizer):
     """ Train the model """
 
     args.train_batch_size = args.per_device_train_batch_size
-    # Part 3 begin
-    # train_sampler = RandomSampler(train_dataset)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    # Part 3 end
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
     if args.max_steps > 0:
@@ -146,40 +143,18 @@ def train(args, train_dataset, model, tokenizer):
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
     printed_minibatch_losses = 0
-    profiler = None
-    # Part 3 begin
     iter_times = []
-    loss_curve = []  # loss curve for this node (rank)
-    # Part 3 ends
-
-    # Part 4: profile 3 training steps while skipping the first step.
-    if args.enable_profiler and args.local_rank in [-1, 0]:
-        profiler_activities = [torch.profiler.ProfilerActivity.CPU]
-        if args.device.type == "cuda":
-            profiler_activities.append(torch.profiler.ProfilerActivity.CUDA)
-
-        profiler = torch.profiler.profile(
-            activities=profiler_activities,
-            schedule=torch.profiler.schedule(wait=1, warmup=0, active=3, repeat=1),
-            record_shapes=True,
-            profile_memory=True,
-            with_stack=False,
-        )
-        profiler.start()
+    loss_curve = []
 
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
     for _ in train_iterator:
-        # Part 3 begin
         if args.local_rank != -1:
             train_sampler.set_epoch(_)
-        # Part 3 end
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-            # Part 3 begin
             iter_start = time.perf_counter()
-            # part 3 end
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':      batch[0],
@@ -189,14 +164,12 @@ def train(args, train_dataset, model, tokenizer):
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
-            # Part 3 begin
             if args.local_rank in [-1, 0] and printed_minibatch_losses < 5:
                 print("minibatch {} loss: {:.6f}".format(printed_minibatch_losses + 1, loss.item()))
                 printed_minibatch_losses += 1
 
             # Log loss for every step on every node
             loss_curve.append(loss.item())
-            # Part 3 end
 
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
@@ -222,15 +195,10 @@ def train(args, train_dataset, model, tokenizer):
                 model.zero_grad()
                 global_step += 1
 
-            # Part 3 begin
             iter_elapsed = time.perf_counter() - iter_start
-            # Skip the first iteration (warm-up / data loading overhead)
+            # Skip the first iteration
             if step > 0:
                 iter_times.append(iter_elapsed)
-
-            if profiler is not None:
-                profiler.step()
-            # Part 3 end
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
@@ -244,15 +212,8 @@ def train(args, train_dataset, model, tokenizer):
         evaluate(args, model, tokenizer, prefix="")
         ##################################################
 
-    # Part 3 begin
-    # Save per-rank loss curves and a single aggregated timing file.
+    # Save loss curves and average time.
     write_training_artifacts(args, loss_curve, iter_times)
-
-    if profiler is not None:
-        profiler.stop()
-        trace_path = os.path.join(args.results_dir, "trace.json")
-        profiler.export_chrome_trace(trace_path)
-        logger.info("Saved profiler trace to %s", trace_path)
 
     rank_label = args.local_rank if args.local_rank != -1 else 0
     logger.info("Rank %d loss curve: %s", rank_label, loss_curve)
@@ -261,7 +222,6 @@ def train(args, train_dataset, model, tokenizer):
         avg_iter_time = sum(iter_times) / len(iter_times)
         logger.info("Rank %d: avg time per iteration (excluding first): %.4f s over %d iterations",
                     rank_label, avg_iter_time, len(iter_times))
-    # Part 3 end
     
     return global_step, tr_loss / global_step
 
@@ -275,21 +235,16 @@ def evaluate(args, model, tokenizer, prefix=""):
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
         eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
 
-        # Part 3: all ranks participate in the barrier inside load_and_cache_examples above,
-        # but only rank 0 (or single-node) actually runs evaluation.
+        # Only rank 0 (or single-node) runs evaluation.
         if args.local_rank not in [-1, 0]:
             continue
-        # Part 3 ends
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
 
         args.eval_batch_size = args.per_device_eval_batch_size
         # Note that DistributedSampler samples randomly
-        # Part 3 begin
-        # eval_sampler = SequentialSampler(eval_dataset)
         eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset, shuffle=False)
-        # Part 3 end
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
         
         # Eval!
@@ -460,7 +415,6 @@ def main():
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
                              "See details at https://nvidia.github.io/apex/amp.html")
-    # Part 3 begin
     parser.add_argument("--master_ip", type=str, default="127.0.0.1",
                         help="Master node IP for distributed training.")
     parser.add_argument("--master_port", type=str, default="29500",
@@ -470,9 +424,6 @@ def main():
     parser.add_argument("--results_dir", type=str,
                         default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Part3", "results"),
                         help="Directory for timing and loss-curve artifacts.")
-    parser.add_argument("--enable_profiler", action='store_true',
-                        help="Enable torch.profiler and save trace.json (skip first step, profile next three).")
-    # Part 3 end
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank. If single-node training, local_rank defaults to -1.")
     args = parser.parse_args()
@@ -480,28 +431,17 @@ def main():
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
 
-    # set up (distributed) training
-    # Part 3 begin
-    # args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    # args.n_gpu = torch.cuda.device_count()
-    if args.local_rank == -1 or args.world_size == 1:
-        args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        args.n_gpu = torch.cuda.device_count()
-    else:
-        backend = 'nccl' if torch.cuda.is_available() and not args.no_cuda else 'gloo'
-        if backend == 'nccl':
-            torch.cuda.set_device(0)
-            args.device = torch.device("cuda", 0)
-        else:
-            args.device = torch.device("cpu")
+
+    # set up distributed trainin
+    args.device = torch.device("cpu")
+    args.n_gpu = 0
+    if args.local_rank != -1 and args.world_size > 1:
         dist.init_process_group(
-            backend=backend,
+            backend="gloo",
             init_method="tcp://{}:{}".format(args.master_ip, args.master_port),
             world_size=args.world_size,
             rank=args.local_rank,
         )
-        args.n_gpu = 1
-    
 
     # Setup logging
     if not os.path.exists(args.output_dir):
@@ -522,7 +462,6 @@ def main():
                         force=True)
     logger.warning("Process rank: %s, device: %s, distributed training: %s, 16-bits training: %s",
                     args.local_rank, args.device, bool(args.local_rank != -1), args.fp16)
-    # Part 3 end
     
     # Set seed
     set_seed(args)
@@ -555,15 +494,10 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
-    # Part 3 begin
     if args.local_rank != -1 and args.world_size > 1:
-        if args.device.type == "cuda":
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[0], output_device=0)
-        else:
-            model = torch.nn.parallel.DistributedDataParallel(model)
-    # Part 3 end
+        model = torch.nn.parallel.DistributedDataParallel(model)
+    
     logger.info("Training/evaluation parameters %s", args)
-
 
     # Training
     if args.do_train:

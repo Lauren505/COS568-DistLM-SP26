@@ -64,6 +64,9 @@ def set_seed(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.cuda.manual_seed_all(args.seed)
 
 
 def write_training_artifacts(args, loss_curve, iter_times):
@@ -98,25 +101,6 @@ def write_training_artifacts(args, loss_curve, iter_times):
             if valid_times:
                 writer.write("overall_mean\t{:.10f}\n".format(sum(valid_times) / len(valid_times)))
 
-
-def read_gradient(model, max_tensors=3):
-    snapshot = []
-    for name, param in model.named_parameters():
-        if param.grad is None:
-            continue
-        grad = param.grad.detach()
-        snapshot.append((name, tuple(grad.shape), float(grad.norm().item())))
-        if len(snapshot) >= max_tensors:
-            break
-    return snapshot
-
-
-def sync_gradients(model, world_size):
-    for _, param in model.named_parameters():
-        if param.grad is None:
-            continue
-        dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
-        param.grad.data /= world_size
 
 def train(args, train_dataset, model, tokenizer):
     """ Train the model """
@@ -159,14 +143,15 @@ def train(args, train_dataset, model, tokenizer):
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
     printed_minibatch_losses = 0
-    printed_gradient_snapshot = False
     profiler = None
     iter_times = []
-    loss_curve = [] 
+    loss_curve = []
 
     # Part 4
     if args.enable_profiler and args.local_rank in [-1, 0]:
         profiler_activities = [torch.profiler.ProfilerActivity.CPU]
+        if args.device.type == "cuda":
+            profiler_activities.append(torch.profiler.ProfilerActivity.CUDA)
 
         profiler = torch.profiler.profile(
             activities=profiler_activities,
@@ -183,7 +168,6 @@ def train(args, train_dataset, model, tokenizer):
     for _ in train_iterator:
         if args.local_rank != -1:
             train_sampler.set_epoch(_)
-
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
             iter_start = time.perf_counter()
@@ -215,20 +199,6 @@ def train(args, train_dataset, model, tokenizer):
                 # TODO(cos568): perform backward pass here (expect one line of code)
                 loss.backward()
                 ##################################################
-
-                if args.local_rank != -1 and args.world_size > 1 and not printed_gradient_snapshot:
-                    grad_snapshot = read_gradient(model)
-                    rank_label = dist.get_rank()
-                    logger.info("Rank %d gradient snapshot (name, shape, L2 norm): %s",
-                                rank_label, grad_snapshot)
-                    printed_gradient_snapshot = True
-
-                if args.local_rank != -1 and args.world_size > 1:
-                    sync_gradients(
-                        model=model,
-                        world_size=args.world_size,
-                    )
-
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             tr_loss += loss.item()
@@ -242,7 +212,7 @@ def train(args, train_dataset, model, tokenizer):
                 global_step += 1
 
             iter_elapsed = time.perf_counter() - iter_start
-            # Skip the first iteration (warm-up / data loading overhead)
+            # Skip the first iteration
             if step > 0:
                 iter_times.append(iter_elapsed)
 
@@ -261,7 +231,7 @@ def train(args, train_dataset, model, tokenizer):
         evaluate(args, model, tokenizer, prefix="")
         ##################################################
 
-    # Save per-rank loss curves and a single aggregated timing file.
+    # Save loss curves and average time.
     write_training_artifacts(args, loss_curve, iter_times)
 
     if profiler is not None:
@@ -470,14 +440,14 @@ def main():
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
                              "See details at https://nvidia.github.io/apex/amp.html")
-    parser.add_argument("--master_ip", type=str, default="10.10.1.2",
+    parser.add_argument("--master_ip", type=str, default="127.0.0.1",
                         help="Master node IP for distributed training.")
-    parser.add_argument("--master_port", type=str, default="12345",
+    parser.add_argument("--master_port", type=str, default="29500",
                         help="Master node port for distributed training.")
     parser.add_argument("--world_size", type=int, default=1,
                         help="Total number of participating workers.")
     parser.add_argument("--results_dir", type=str,
-                        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Part2b", "results"),
+                        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Part3", "results"),
                         help="Directory for timing and loss-curve artifacts.")
     parser.add_argument("--enable_profiler", action='store_true',
                         help="Enable torch.profiler and save trace.json (skip first step, profile next three).")
@@ -487,6 +457,7 @@ def main():
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
+
 
     # set up distributed trainin
     args.device = torch.device("cpu")
@@ -508,11 +479,9 @@ def main():
     rank_label = args.local_rank if args.local_rank != -1 else 0
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-    log_handlers = [console_handler]
-    if args.local_rank in [-1, 0]:
-        file_handler = logging.FileHandler(os.path.join(args.results_dir, "run_rank_{}.log".format(rank_label)))
-        file_handler.setLevel(logging.INFO)
-        log_handlers.append(file_handler)
+    file_handler = logging.FileHandler(os.path.join(args.results_dir, "run_rank_{}.log".format(rank_label)))
+    file_handler.setLevel(logging.INFO)
+    log_handlers = [console_handler, file_handler]
     logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                         datefmt = '%m/%d/%Y %H:%M:%S',
                         level = logging.INFO,
@@ -552,8 +521,10 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
+    if args.local_rank != -1 and args.world_size > 1:
+        model = torch.nn.parallel.DistributedDataParallel(model)
+    
     logger.info("Training/evaluation parameters %s", args)
-
 
     # Training
     if args.do_train:
