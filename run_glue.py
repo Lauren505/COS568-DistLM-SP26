@@ -113,26 +113,13 @@ def read_gradient_snapshot(model, max_tensors=3):
     return snapshot
 
 
-def sync_gradients_with_gather_scatter(model, world_size, rank):
-    """Part 2(a) Step 3: gather grads to rank 0, average, scatter back."""
+def sync_gradients_with_all_reduce(model, world_size):
+    """Part 2(b): all_reduce SUM across all ranks then divide by world_size."""
     for _, param in model.named_parameters():
         if param.grad is None:
             continue
-
-        grad = param.grad.data
-        recv = torch.zeros_like(grad)
-
-        if rank == 0:
-            gathered = [torch.zeros_like(grad) for _ in range(world_size)]
-            dist.gather(grad, gather_list=gathered, dst=0)
-            avg_grad = sum(gathered) / world_size
-            scatter_list = [avg_grad.clone() for _ in range(world_size)]
-            dist.scatter(recv, scatter_list=scatter_list, src=0)
-        else:
-            dist.gather(grad, gather_list=None, dst=0)
-            dist.scatter(recv, scatter_list=None, src=0)
-
-        param.grad.data.copy_(recv)
+        dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
+        param.grad.data /= world_size
 # Part 2 end
 
 def train(args, train_dataset, model, tokenizer):
@@ -249,10 +236,10 @@ def train(args, train_dataset, model, tokenizer):
                     printed_gradient_snapshot = True
 
                 if args.local_rank != -1 and args.world_size > 1:
-                    sync_gradients_with_gather_scatter(
+                    # Part 2(b): all_reduce SUM then average
+                    sync_gradients_with_all_reduce(
                         model=model,
                         world_size=args.world_size,
-                        rank=dist.get_rank(),
                     )
 
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
